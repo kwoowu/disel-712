@@ -5,9 +5,9 @@ open Shim
 type mode = Client | Server
 
 let mode : mode option ref = ref None
-let server_name : int option ref = ref None
-let me : int option ref = ref None
-let nodes : (int * (string * int)) list ref = ref []
+let server_name : State.nid option ref = ref None
+let me : State.nid option ref = ref None
+let nodes : (State.nid * (string * int)) list ref = ref []
 
 (* Workload (client only). Without -n the client runs the original c_runner
    on the hardcoded client_input. *)
@@ -68,12 +68,16 @@ let percentile sorted p =
 
 let run_workload n =
   let reqs = Workload.generate ~n ~len:!wl_len ~vmax:!wl_vmax ~keys:!wl_keys ~seed:!wl_seed in
+  (* Convert to the extracted nat representation (int or unary) outside the
+     timed region, and the results back after it. *)
+  let nreqs = List.map (List.map nat_of_int) reqs in
   (* prec (at least two values per request) is the verified client's precondition *)
-  if not (List.for_all SimpleCalculatorApp.prec reqs) then usage "-len must be >= 2";
+  if not (List.for_all SimpleCalculatorApp.prec nreqs) then usage "-len must be >= 2";
   Shim.record_latency := true;
   let t0 = Unix.gettimeofday () in
-  let res = SimpleCalculatorApp.compute_input reqs in
+  let nres = SimpleCalculatorApp.compute_input nreqs in
   let elapsed = Unix.gettimeofday () -. t0 in
+  let res = List.map (fun (a, v) -> (List.map int_of_nat a, int_of_nat v)) nres in
   let lat = Array.of_list (List.rev_map (fun s -> s *. 1e6) !Shim.latencies) in
   Array.sort compare lat;
   let digest = Workload.digest res in

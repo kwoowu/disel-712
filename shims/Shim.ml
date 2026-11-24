@@ -11,11 +11,11 @@ let record_latency = ref false
 let last_request_sent = ref 0.0
 let latencies : float list ref = ref []
 
-let read_fds : (Unix.file_descr, int) Hashtbl.t = Hashtbl.create 17
-let write_fds : (int, Unix.file_descr) Hashtbl.t = Hashtbl.create 17
+let read_fds : (Unix.file_descr, State.nid) Hashtbl.t = Hashtbl.create 17
+let write_fds : (State.nid, Unix.file_descr) Hashtbl.t = Hashtbl.create 17
 
-type cfg = { nodes : (int * (string * int)) list
-           ; me : int
+type cfg = { nodes : (State.nid * (string * int)) list
+           ; me : State.nid
            ; mutable st : State.StateGetters.state
            }
 
@@ -134,7 +134,7 @@ let recv_msg fd =
     Printf.printf "got msg in protocol %a with tag = %a, contents = %a from %s" print_nat l print_nat tag (print_list print_nat) msg (string_of_nat src);
     print_newline ()
   end;
-  if !record_latency && tag = 1 then
+  if !record_latency && int_of_nat tag = 1 then
     latencies := (Unix.gettimeofday () -. !last_request_sent) :: !latencies;
   (l, src, tag, msg)
 
@@ -169,7 +169,7 @@ let send_msg l dst tag msg =
     print_newline ()
   end;
   let t0 = Timed.now () in
-  if !record_latency && tag = 0 then last_request_sent := Unix.gettimeofday ();
+  if !record_latency && int_of_nat tag = 0 then last_request_sent := Unix.gettimeofday ();
   let fd = get_write_fd dst in
   let s = serialize_msg l tag msg in
   let chunk = Bytes.of_string s in

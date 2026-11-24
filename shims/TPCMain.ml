@@ -6,9 +6,9 @@ open Shim
 type mode = Coordinator | Participant
 
 let mode : mode option ref = ref None
-let server_name : int option ref = ref None
-let me : int option ref = ref None
-let nodes : (int * (string * int)) list ref = ref []
+let server_name : State.nid option ref = ref None
+let me : State.nid option ref = ref None
+let nodes : (State.nid * (string * int)) list ref = ref []
 
 let usage msg =
   print_endline msg;

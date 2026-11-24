@@ -2,8 +2,8 @@
 let nat_of_int (n : int) : int = n
 let int_of_nat (n : int) : int = n
 
-let nat_of_string s = int_of_string s
-let string_of_nat n = string_of_int n
+let nat_of_string s = nat_of_int (int_of_string s)
+let string_of_nat n = string_of_int (int_of_nat n)
 
 let raw_bytes_of_int (x : int) : bytes =
   let buf = Bytes.make 4 '\x00' in

@@ -1,9 +1,8 @@
 From DiSeL Require Import While.
 From Coq Require Import ExtrOcamlBasic.
-(* Extract nat as OCaml int. Note: mathcomp's ssrnat.eqn is still extracted as a
-   recursive countdown (O(min m n) per comparison), and Nat.sub uses the
-   polymorphic Stdlib.max (generic comparison). Both are left as-is for now. *)
-From Coq Require Import ExtrOcamlNatInt.
+(* nat is extracted as unary Datatypes.nat (Disel's original setting). To
+   extract it as OCaml int instead, import ExtrOcamlNatInt here (see the
+   benchmarking patch that this one reverts). *)
 
 Extraction Inline ssrbool.SimplPred.
 

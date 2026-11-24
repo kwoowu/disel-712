@@ -1,6 +1,11 @@
-(* nat is extracted as OCaml int (ExtrOcamlNatInt), so these are identities. *)
-let nat_of_int (n : int) : int = n
-let int_of_nat (n : int) : int = n
+(* nat is extracted as unary Datatypes.nat, so these walk the S chain. *)
+let rec nat_of_int n =
+  if n <= 0 then Datatypes.O
+  else Datatypes.S (nat_of_int (n - 1))
+
+let rec int_of_nat = function
+  | Datatypes.O -> 0
+  | Datatypes.S n -> int_of_nat n + 1
 
 let nat_of_string s = nat_of_int (int_of_string s)
 let string_of_nat n = string_of_int (int_of_nat n)

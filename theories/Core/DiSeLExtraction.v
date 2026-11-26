@@ -5,6 +5,16 @@ From Coq Require Import ExtrOcamlBasic.
    polymorphic Stdlib.max (generic comparison). Both are left as-is for now. *)
 From Coq Require Import ExtrOcamlNatInt.
 
+(* With nat as int, mathcomp's eqn would extract as a recursive countdown
+   (O(min m n) steps, allocating closures), and ExtrOcamlNatInt's Nat.sub uses
+   the polymorphic Stdlib.max (OCaml's generic comparison). Map both to native,
+   int-typed operations; the annotations make OCaml compile them to plain
+   integer instructions. *)
+Extract Inlined Constant mathcomp.ssreflect.ssrnat.eqn =>
+  "(fun (x : int) (y : int) -> x = y)".
+Extract Inlined Constant Coq.Init.Nat.sub =>
+  "(fun (n : int) (m : int) -> if n > m then n - m else 0)".
+
 Extraction Inline ssrbool.SimplPred.
 
 Extract Constant Actions.Actions.tryrecv_action_wrapper => "DiSeL.tryrecv_action_wrapper".

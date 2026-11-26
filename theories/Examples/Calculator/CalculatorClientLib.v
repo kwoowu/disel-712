@@ -28,7 +28,7 @@ Notation cal := (cal_with_inv l f prec cs cls).
 Notation sts := (snd_trans cal).
 Notation rts := (rcv_trans cal).
 
-Notation W := (mkWorld cal).
+Let W := mkWorld cal.
 
 (* Variable d : dstatelet. *)
 (* Hypothesis C : coh cal d. *)

@@ -21,7 +21,7 @@ Hypothesis Huniq : uniq nodes.
 Notation cal := (CalculatorProtocol f prec cs cls l).
 Notation sts := (snd_trans cal).
 Notation rts := (rcv_trans cal).
-Notation W := (mkWorld cal).
+Let W := mkWorld cal.
 
 (* A server node *)
 Variable sv : nid.
@@ -114,7 +114,7 @@ Hypothesis Huniq : uniq nodes.
 Notation cal := (CalculatorProtocol f prec cs cls l).
 Notation sts := (snd_trans cal).
 Notation rts := (rcv_trans cal).
-Notation W := (mkWorld cal).
+Let W := mkWorld cal.
 
 (* A server node *)
 Variable sv : nid.
@@ -176,7 +176,7 @@ Hypothesis Huniq : uniq nodes.
 Notation cal := (CalculatorProtocol f prec cs cls l).
 Notation sts := (snd_trans cal).
 Notation rts := (rcv_trans cal).
-Notation W := (mkWorld cal).
+Let W := mkWorld cal.
 
 (* A server node *)
 Variable sv : nid.
@@ -318,7 +318,7 @@ Hypothesis Huniq : uniq nodes.
 Notation cal := (CalculatorProtocol f prec cs cls l).
 Notation sts := (snd_trans cal).
 Notation rts := (rcv_trans cal).
-Notation W := (mkWorld cal).
+Let W := mkWorld cal.
 Variable sv : nid.
 Hypothesis  Hs : sv \in cs.
 Notation loc i := (getLocal sv (getStatelet i l)).

@@ -27,11 +27,11 @@ Hypothesis Huniq2 : uniq nodes2.
 Notation cal1 := (cal_with_inv l1 f prec cs1 cls1).
 Notation cal2 := (cal_with_inv l2 f prec cs2 cls2).
 
-Notation W1 := (mkWorld cal1).
-Notation W2 := (mkWorld cal2).
+Let W1 := mkWorld cal1.
+Let W2 := mkWorld cal2.
 
 (* Composite world *)
-Definition V := W1 \+ W2.
+Let V := W1 \+ W2.
 Lemma validV : valid V.
 Proof.
 rewrite /V; apply/andP=>/=.
@@ -91,22 +91,22 @@ Proof. by move=>????; rewrite dom0. Qed.
 
 Next Obligation.
 rewrite -(unitR V)/V.
-have @V: valid (W1 \+ W2 \+ Unit) by rewrite unitR validV.
-apply: (injectL V); do?[apply: hook_complete_unit | apply: hooks_consistent_unit].
+have @HV: valid (W1 \+ W2 \+ Unit) by rewrite unitR validV.
+apply: (injectL HV); do?[apply: hook_complete_unit | apply: hooks_consistent_unit].
 by move=>??????; rewrite dom0.
 Defined.
 
 Next Obligation.
 rewrite -(unitR V)/V.
-have @V: valid (W1 \+ W2 \+ Unit) by rewrite unitR validV.
-apply: (injectR V); do?[apply: hook_complete_unit | apply: hooks_consistent_unit].
+have @HV: valid (W1 \+ W2 \+ Unit) by rewrite unitR validV.
+apply: (injectR HV); do?[apply: hook_complete_unit | apply: hooks_consistent_unit].
 by move=>??????; rewrite dom0.
 Qed.
 
 Next Obligation.
 rewrite -(unitR V)/V.
-have @V: valid (W1 \+ W2 \+ Unit) by rewrite unitR validV.
-apply: (injectL V); do?[apply: hook_complete_unit | apply: hooks_consistent_unit].
+have @HV: valid (W1 \+ W2 \+ Unit) by rewrite unitR validV.
+apply: (injectL HV); do?[apply: hook_complete_unit | apply: hooks_consistent_unit].
 by move=>??????; rewrite dom0.
 Defined.
 

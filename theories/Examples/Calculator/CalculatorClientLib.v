@@ -28,7 +28,7 @@ Notation cal := (cal_with_inv l f prec cs cls).
 Notation sts := (snd_trans cal).
 Notation rts := (rcv_trans cal).
 
-Notation W := (mkWorld cal).
+Let W := mkWorld cal.
 
 (* Variable d : dstatelet. *)
 (* Hypothesis C : coh cal d. *)
@@ -258,7 +258,7 @@ Definition compute_list_spec server ys :=
      [/\ loc i = st :-> ([::] : reqs),
       all prec xs,
       all (fun e => f e.1 == Some e.2) acc,
-      ys = map fst acc ++ xs &
+      ys = map fst (rev acc) ++ xs &
       server \in cs],
    fun (res : seq (input * nat)) m =>
      [/\ loc m = st :-> ([::] : reqs),
@@ -280,18 +280,19 @@ Program Definition compute_list_f server (xs : seq input) :
     Do _ (let: (xs, acc) := xsa in
           if xs is x :: xs'
           then r <-- compute_f server x;
-               let: acc' := rcons acc (x, r) in
-               rec (xs', acc')
-          else ret _ _ acc)) (xs, [::])).
+               (* results are accumulated in reverse (O(1) per request)
+                  and reversed once at the end *)
+               rec (xs', (x, r) :: acc)
+          else ret _ _ (rev acc))) (xs, [::])).
 
 Next Obligation.
 move=>i1/=[L1]; move:l0 l4=>zs acc H1 H2 H3 H4.
 case: zs H1 H3=>//=[_|z zs/andP[H1]H5] H3.
 - by rewrite cats0 in H3;
-  apply: ret_rule=>i2 R1; split=>//; rewrite ?(rely_loc' _ R1)//.
+  apply: ret_rule=>i2 R1; split=>//; rewrite ?(rely_loc' _ R1)// all_rev.
 apply: step; apply: call_rule=>//r i2[L2]F C2.
-apply: call_rule=>//_; split=>//; first by rewrite all_rcons/= F eqxx.
-by rewrite map_rcons/= -cats1 -catA cat_cons/=.
+apply: call_rule=>//_; split=>//; first by rewrite /= F eqxx.
+by rewrite rev_cons map_rcons/= -cats1 -catA cat_cons/=.
 Qed.
 
 Next Obligation.

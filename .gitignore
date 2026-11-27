@@ -89,3 +89,6 @@ _build
 Makefile.coq.conf
 .Makefile.coq.d
 .coqdeps.d
+_build-prof/
+shims/Workload.ml
+shims/Workload.mli

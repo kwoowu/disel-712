@@ -2,11 +2,20 @@ open Unix
 open Util
 open Debug
 
-let read_fds : (Unix.file_descr, Datatypes.nat) Hashtbl.t = Hashtbl.create 17
-let write_fds : (Datatypes.nat, Unix.file_descr) Hashtbl.t = Hashtbl.create 17
+(* Per-message logging, enabled by setting DISEL_LOG. *)
+let log = Sys.getenv_opt "DISEL_LOG" <> None
 
-type cfg = { nodes : (Datatypes.nat * (string * int)) list
-           ; me : Datatypes.nat
+(* Request/response latency recording, used by the client only (one request
+   outstanding at a time, so each response pairs with the last request). *)
+let record_latency = ref false
+let last_request_sent = ref 0.0
+let latencies : float list ref = ref []
+
+let read_fds : (Unix.file_descr, State.nid) Hashtbl.t = Hashtbl.create 17
+let write_fds : (State.nid, Unix.file_descr) Hashtbl.t = Hashtbl.create 17
+
+type cfg = { nodes : (State.nid * (string * int)) list
+           ; me : State.nid
            ; mutable st : State.StateGetters.state
            }
 
@@ -32,8 +41,7 @@ let send_chunk (fd : file_descr) (buf : bytes) : unit =
 
 let recv_or_close fd buf offs len flags =
   let n = recv fd buf offs len flags in
-  if n = 0 then
-    failwith "recv_or_close: other side closed connection.";
+  if n = 0 then raise End_of_file;
   n
 
 
@@ -73,29 +81,40 @@ let get_write_fd name =
 let setup cfg =
   Printexc.record_backtrace true;
   the_cfg := Some cfg;
-  Printf.printf "initial state is: %a\n%!" print_state (Obj.magic cfg.st);
+  if log then Printf.printf "initial state is: %a\n%!" print_state (Obj.magic cfg.st);
   let (_, port) = get_addr_port cfg cfg.me in
   (* Printf.printf "listening on port %d" port; print_newline (); *)
   setsockopt listen_fd SO_REUSEADDR true;
   bind listen_fd (ADDR_INET (inet_addr_any, port));
-  listen listen_fd 8
+  listen listen_fd 8;
+  Printf.printf "listening on port %d\n%!" port
 
 
 let new_conn () =
-  print_endline "new connection!";
+  if log then print_endline "new connection!";
   let (node_fd, node_addr) = accept listen_fd in
   let chunk = receive_chunk node_fd in
   let node = Bytes.to_string chunk in
   let name = nat_of_string node in
   Hashtbl.add read_fds node_fd name;
   (* ignore (get_write_fd name); *)
-  Printf.printf "done processing new connection from node %s" node;
-  print_newline ()
+  if log then begin
+    Printf.printf "done processing new connection from node %s" node;
+    print_newline ()
+  end
 
-let check_for_new_connections () =
-  let fds = [listen_fd] in
-  let (ready_fds, _, _) = select fds [] [] 0.0 in
-  List.iter (fun _ -> new_conn ()) ready_fds
+(* A peer closed its connection (e.g. the client finished): forget it. *)
+let drop_conn fd =
+  if log then Printf.printf "connection from node %s closed\n%!"
+                (string_of_nat (get_name_for_read_fd fd));
+  let name = get_name_for_read_fd fd in
+  Hashtbl.remove read_fds fd;
+  Unix.close fd;
+  (* Also forget our connection to it, so a later node with the same name
+     (e.g. the next client run) gets a fresh connection. *)
+  match Hashtbl.find_opt write_fds name with
+  | Some wfd -> Hashtbl.remove write_fds name; Unix.close wfd
+  | None -> ()
 
 let get_all_read_fds () =
   Hashtbl.fold (fun fd _ acc -> fd :: acc) read_fds []
@@ -111,17 +130,51 @@ let recv_msg fd =
   let chunk = receive_chunk fd in
   let (l, tag, msg) = deserialize_msg (Bytes.to_string chunk) in
   let src = get_name_for_read_fd fd in
-  Printf.printf "got msg in protocol %a with tag = %a, contents = %a from %s" print_nat l print_nat tag (print_list print_nat) msg (string_of_nat src);
-  print_newline ();
+  if log then begin
+    Printf.printf "got msg in protocol %a with tag = %a, contents = %a from %s" print_nat l print_nat tag (print_list print_nat) msg (string_of_nat src);
+    print_newline ()
+  end;
+  if !record_latency && int_of_nat tag = 1 then
+    latencies := (Unix.gettimeofday () -. !last_request_sent) :: !latencies;
   (l, src, tag, msg)
 
+(* Blocking receive: wait in select (no timeout) until a peer has a message,
+   accepting new connections and dropping closed ones along the way. This
+   replaces the original non-blocking poll (select with timeout 0.0): it is
+   equivalent to the program's receive loop seeing None some number of times
+   and then Some, which is an execution the verified program allows. *)
+let rec recv_blocking () =
+  let fds = listen_fd :: get_all_read_fds () in
+  Timed.enter_idle ();
+  let (ready_fds, _, _) = select fds [] [] (-1.0) in
+  Timed.leave_idle ();
+  let t1 = Timed.now () in
+  if List.mem listen_fd ready_fds then new_conn ();
+  let rec first = function
+    | [] -> None
+    | fd :: fds when fd = listen_fd -> first fds
+    | fd :: fds ->
+       match recv_msg fd with
+       | m -> Some m
+       | exception End_of_file -> drop_conn fd; first fds in
+  let r = first ready_fds in
+  Timed.add_network (Timed.now () -. t1);
+  match r with
+  | Some m -> m
+  | None -> recv_blocking ()
+
 let send_msg l dst tag msg =
-  Printf.printf "sending msg in protocol %a with tag = %a, contents = %a to %s" print_nat l print_nat tag (print_list print_nat) msg (string_of_nat dst);
-  print_newline ();
+  if log then begin
+    Printf.printf "sending msg in protocol %a with tag = %a, contents = %a to %s" print_nat l print_nat tag (print_list print_nat) msg (string_of_nat dst);
+    print_newline ()
+  end;
+  let t0 = Timed.now () in
+  if !record_latency && int_of_nat tag = 0 then last_request_sent := Unix.gettimeofday ();
   let fd = get_write_fd dst in
   let s = serialize_msg l tag msg in
   let chunk = Bytes.of_string s in
-  send_chunk fd chunk
+  send_chunk fd chunk;
+  Timed.add_network (Timed.now () -. t0)
 
 let get_current_state () =
   let cfg = get_cfg "get_current_sate" in

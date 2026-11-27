@@ -48,68 +48,47 @@ let find_option f l =
     Some (List.find f l)
   with Not_found -> None
 
-let max_errors = 3
-let errors = ref 0
-
-let rec get_msg = function
-  | [] -> None
-  | fd :: fds ->
-     try
-       Some (recv_msg fd)
-     with e ->
-       (* Printf.printf "Got exception: %s\n" (Printexc.to_string e);
-       Printexc.print_backtrace stdout; *)
-       errors := !errors + 1;
-       if !errors < max_errors
-       then get_msg fds
-       else begin
-           (* Printf.printf "Too many errors; aborting.\n%!"; *)
-           raise e
-         end
-
+(* Receive one message (blocking until one arrives, see Shim.recv_blocking) and
+   run the protocol's receive transition on it. Never returns None. *)
 let tryrecv_action_wrapper (ctx,hk) this p =
-  let () = check_for_new_connections () in
-  let fds = get_all_read_fds () in
-  let (ready_fds, _, _) = Unix.select fds [] [] 0.0 in
-  begin
-    match get_msg ready_fds with
-    | None -> (* nothing available *) None
-    | Some (l, src, tag, msg) ->
-       begin
-         match Unionmap.UMDef.find Ordtype.nat_ordType (Obj.magic l) ctx with
-         | None ->
-            begin
-              Printf.printf "World is %a\n%!" print_world (Unionmap.UMDef.from (Obj.magic ()) ctx);
-              failwith
-                (Printf.sprintf "Could not find protocol %a in the world!" sprint_nat l)
-            end
-         | Some protocol ->
-            begin
-              match find_option (fun rt -> rt.Protocols.Transitions.t_rcv = tag)
-                                protocol.Protocols.Protocols.rcv_trans with
-              | None ->
-                 failwith
-                   (Printf.sprintf
-                      "Could not find a receive transition with tag %a in the protocol!"
-                      sprint_nat tag)
-              | Some rt ->
-                 let dstatelet = get_protocol_state (Obj.magic l) in
-                 let tm = { State.tag = tag; tms_cont = msg } in
-                 if rt.Protocols.Transitions.msg_wf dstatelet (Obj.magic ()) this src tm
-                 then
-                   let st' = rt.Protocols.Transitions.receive_step this src msg dstatelet (Obj.magic ()) (Obj.magic ()) in
-                   update_my_state (Obj.magic l) this st';
-                   Some ((src, tag), msg) (* respect Coq tuple associativity *)
-                 else
-                   failwith (Printf.sprintf "Received a msg that did not pass the wf test!")
-            end
-       end
-  end
+  let (l, src, tag, msg) = Shim.recv_blocking () in
+  let t0 = Timed.now () in
+  match Unionmap.UMDef.find Ordtype.nat_ordType (Obj.magic l) ctx with
+  | None ->
+     begin
+       Printf.printf "World is %a\n%!" print_world (Unionmap.UMDef.from (Obj.magic ()) ctx);
+       failwith
+         (Printf.sprintf "Could not find protocol %a in the world!" sprint_nat l)
+     end
+  | Some protocol ->
+     begin
+       match find_option (fun rt -> rt.Protocols.Transitions.t_rcv = tag)
+                         protocol.Protocols.Protocols.rcv_trans with
+       | None ->
+          failwith
+            (Printf.sprintf
+               "Could not find a receive transition with tag %a in the protocol!"
+               sprint_nat tag)
+       | Some rt ->
+          let dstatelet = get_protocol_state (Obj.magic l) in
+          let tm = { State.tag = tag; tms_cont = msg } in
+          if rt.Protocols.Transitions.msg_wf dstatelet (Obj.magic ()) this src tm
+          then begin
+            let st' = rt.Protocols.Transitions.receive_step this src msg dstatelet (Obj.magic ()) (Obj.magic ()) in
+            update_my_state (Obj.magic l) this st';
+            Timed.add_transitions (Timed.now () -. t0);
+            Some ((src, tag), msg) (* respect Coq tuple associativity *)
+          end
+          else
+            failwith (Printf.sprintf "Received a msg that did not pass the wf test!")
+     end
 
 
 let send_action_wrapper (ctx,hk) p this (l : Ordtype.Ordered.sort) t m dst =
-  Printf.printf "World is %a\n%!" print_world (Unionmap.UMDef.from (Obj.magic ()) ctx);
+  if Shim.log then
+    Printf.printf "World is %a\n%!" print_world (Unionmap.UMDef.from (Obj.magic ()) ctx);
   send_msg (Obj.magic l) dst (t.Protocols.Transitions.t_snd) m;
+  let t0 = Timed.now () in
   let dstatelet = get_protocol_state l in
   let ost' = t.Protocols.Transitions.send_step this dst dstatelet m (Obj.magic ()) in
   begin
@@ -117,6 +96,7 @@ let send_action_wrapper (ctx,hk) p this (l : Ordtype.Ordered.sort) t m dst =
     | None -> failwith "send_action_wrapper: send_step failed!"
     | Some st' -> update_my_state l this st'
   end;
+  Timed.add_transitions (Timed.now () -. t0);
   m
 
 let skip_action_wrapper (ctx, hk) this l p f =
